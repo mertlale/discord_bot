@@ -24,12 +24,12 @@ The bot's default prefix is dot. You can write to the message section of your di
 The bot starts playing the song on your channel by searching the URL or the song name you typed after the play command. When you add songs one after the other, the bot keeps it in a list and continues to play in order.
 
 The commands supported by the bot are as follows:
-- .play <query> -> Plays the song, or adds it to the playlist if a song has already been added. <query> can be the song's URL on youtube or the name of the song.
-- .stop -> Stops playing and clears the playlist.
-- .pause -> Pauses the playing song.
-- .resume -> Resumes the song that was paused.
-- .queue -> Lists the songs in the playlist.
-- .skip -> Skips to the next song in the playlist
+- `.play <query>    `  Plays the song, or adds it to the playlist if a song has already been added. <query> can be the song's URL on youtube or the name of the song.
+- `.stop    ` Stops playing and clears the playlist.
+- `.pause   `  Pauses the playing song.
+- `.resume `  Resumes the song that was paused.
+- `.queue   `  Lists the songs in the playlist.
+- `.skip    ` Skips to the next song in the playlist
 
 ## Installation
 
