@@ -10,6 +10,8 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='.', intents=intents)
 
 song_queue = []  # List to store the queued songs
+paused = False  # Flag to indicate if playback is paused
+current_song = None  # Currently playing song
 
 @bot.command()
 async def play(ctx, *, query):
@@ -29,7 +31,7 @@ async def play(ctx, *, query):
         if ctx.voice_client.channel != channel:
             await ctx.voice_client.move_to(channel)
 
-    if ctx.voice_client.is_playing():
+    if ctx.voice_client.is_playing() or paused:
         # Add the query to the queue
         song_queue.append(query)
         await ctx.send(f'Song added to the queue: {query}')
@@ -66,19 +68,19 @@ async def search_and_play(ctx, query):
             print(f"Error: {str(e)}")
             return
 
-    ctx.voice_client.play(discord.FFmpegPCMAudio(url))
+    ffmpeg_options = {
+        'options': '-vn',
+        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+    }
+
+    ctx.voice_client.play(discord.FFmpegPCMAudio(url, **ffmpeg_options), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
+
+    current_song = {
+        'url': url,
+        'title': title
+    }
 
     await ctx.send(f'Playing: {title}')
-
-    while ctx.voice_client.is_playing():
-        await asyncio.sleep(1)
-
-    if len(song_queue) > 0:
-        next_query = song_queue.pop(0)
-        if validators.url(next_query):
-            await play_song(ctx, next_query)
-        else:
-            await search_and_play(ctx, next_query)
 
 async def play_song(ctx, url):
     ydl_opts = {
@@ -92,34 +94,82 @@ async def play_song(ctx, url):
 
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
-        url2 = info['formats'][0]['url']
+        title = info['title']
 
-    ctx.voice_client.play(discord.FFmpegPCMAudio(url2))
+    ffmpeg_options = {
+        'options': '-vn',
+        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+    }
 
-    await ctx.send(f'Playing: {url}')
+    ctx.voice_client.play(discord.FFmpegPCMAudio(url, **ffmpeg_options), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
 
-    while ctx.voice_client.is_playing():
-        await asyncio.sleep(1)
+    current_song = {
+        'url': url,
+        'title': title
+    }
 
+    await ctx.send(f'Playing: {title}')
+
+async def play_next(ctx):
+    global current_song
     if len(song_queue) > 0:
-        next_url = song_queue.pop(0)
-        if validators.url(next_url):
-            await play_song(ctx, next_url)
+        next_query = song_queue.pop(0)
+        if validators.url(next_query):
+            await play_song(ctx, next_query)
         else:
-            await search_and_play(ctx, next_url)
+            await search_and_play(ctx, next_query)
+    else:
+        current_song = None
 
 @bot.command()
 async def skip(ctx):
-    if ctx.voice_client.is_playing():
+    if ctx.voice_client and ctx.voice_client.is_playing():
         ctx.voice_client.stop()  # Stop the current song
         await ctx.send("Skipping to the next song.")
-        if len(song_queue) > 0:
-            next_query = song_queue.pop(0)
-            if validators.url(next_query):
-                await play_song(ctx, next_query)
-            else:
-                await search_and_play(ctx, next_query)
     else:
         await ctx.send("No song is currently playing.")
 
-bot.run('token')
+@bot.command()
+async def stop(ctx):
+    if ctx.voice_client is not None:
+        if ctx.voice_client.is_playing():
+            ctx.voice_client.stop()  # Stop the current song
+
+        await ctx.voice_client.disconnect()  # Disconnect the bot from the voice channel
+
+        song_queue.clear()  # Clear the song queue
+        current_song = None  # Reset the currently playing song
+
+        await ctx.send("Playback stopped and queue cleared.")
+    else:
+        await ctx.send("The bot is not connected to a voice channel.")
+
+@bot.command()
+async def pause(ctx):
+    global paused
+    if ctx.voice_client and ctx.voice_client.is_playing():
+        ctx.voice_client.pause()
+        paused = True
+        await ctx.send("Playback paused.")
+    else:
+        await ctx.send("No song is currently playing.")
+
+@bot.command()
+async def resume(ctx):
+    global paused
+    if ctx.voice_client and ctx.voice_client.is_paused():
+        ctx.voice_client.resume()
+        paused = False
+        await ctx.send("Playback resumed.")
+    else:
+        await ctx.send("Playback is not paused.")
+
+@bot.command()
+async def queue(ctx):
+    if len(song_queue) > 0:
+        queue_list = '\n'.join(song_queue)
+        await ctx.send(f'Queue:\n{queue_list}')
+    else:
+        await ctx.send("The song queue is empty.")
+
+bot.run('your_bot_token')
